@@ -1,6 +1,149 @@
 #include "../inc/image.h"
 
-/* ================================================================================================================== */
+/* ========================================================================== */
+
+char **iv_image_list_from_folder( const char *dirname, size_t *num )
+{
+	struct dirent *entity;
+	struct stat    st;
+
+	DIR *dir;
+	
+	char **paths, *ptr,  *file;
+	size_t files,  chars, iter, flen;
+	
+	assert( dirname );
+	
+	/* otwórz katalog */
+	dir = opendir( dirname );
+	
+	if( dir == NULL )
+	{
+		printf( "There was an error while opening directory: '%s'.", dirname );
+		return NULL;
+	}
+	
+	/* przydziel potrzebne miejsce - ścieżka + nazwa pliku */
+	flen = strlen( dirname );
+	file = malloc( flen + NAME_MAX + 1 );
+	
+	/* kopiuj */
+	memcpy( file, dirname, flen );
+	
+	files = 0;
+	chars = 0;
+	
+	/* policz pliki */
+	while( (entity = readdir(dir)) )
+	{
+		int entlen = strlen( entity->d_name );
+		
+		/* ścieżka do pliku */
+		memcpy( file + flen, entity->d_name, entlen );
+		*(file + flen + entlen) = '\0';
+
+		stat( file, &st );
+
+		/* sprawdź czy element jest plikiem */
+		if( !S_ISREG(st.st_mode) )
+			continue;
+
+		/* oraz sprawdź czy posiada prawidłowe rozszerzenie */
+		if( !iv_image_has_valid_extension(entity->d_name) )
+			continue;
+	
+		files++;
+		chars += strlen( entity->d_name );
+	}
+	
+	/* przydziel pamięć na ścieżki do plików */
+	paths = malloc( sizeof *paths * files + flen * files + chars + files );
+	ptr   = (char*)(paths + files);
+	iter  = 0;
+	
+	/* rozpocznij odczyt od nowa */
+	rewinddir( dir );
+	
+	while( (entity = readdir(dir)) )
+	{
+		int entlen = strlen( entity->d_name );
+		
+		memcpy( file + flen, entity->d_name, entlen );
+		*(file + flen + entlen) = '\0';
+		
+		stat( file, &st );
+
+		if( !S_ISREG(st.st_mode) )
+			continue;
+		
+		if( !iv_image_has_valid_extension(entity->d_name) )
+			continue;
+		
+		/* kopiuj nazwę folderu */
+		paths[iter++] = ptr;
+		memcpy( ptr, dirname, flen );
+		
+		/* dołącz do niego nazwę pliku */
+		ptr += flen;
+		memcpy( ptr, entity->d_name, entlen );
+		ptr += entlen;
+
+		*ptr++ = '\0';
+	}
+		
+	/* zamknij katalog */
+	closedir( dir );
+	
+
+	if( num != NULL )
+		*num = files;
+
+	return paths;
+}
+
+/* ========================================================================== */
+
+int iv_image_has_valid_extension( const char *path )
+{
+	/* dostępne rozszerzenia */
+	static char *ext[] =
+	{
+		"jpg", "jpeg", "png",  "tiff", "gif",
+		"xpm", "tga",  "pnm",  "bmp"
+	};
+	static const size_t extlen = sizeof ext / sizeof (char*);
+	static char cext[5];
+	
+	char  *dpos;
+	size_t slen, iter;
+	
+	/* zlokalizuj ostatnią kropkę */
+	dpos = strrchr( path, '.' );
+
+	if( !dpos )
+		return 0;
+
+	/* długość rozszerzenia (od 4 do 5 znaków z kropką) */
+	slen = strlen( dpos );
+	if( slen < 4 || slen > 5 )
+		return 0;
+
+	/* zmień wielkość liter rozszerzenia */
+	cext[0] = *++dpos;
+	cext[1] = *++dpos;
+	cext[2] = *++dpos;
+	cext[3] = slen > 4 ? *++dpos : '\0';
+	cext[4] = '\0';
+	
+	/* sprawdź czy plik posiada odpowiednie rozszerzenie */
+	for( iter = 0; iter < extlen; ++iter )
+		if( strcmp(cext, ext[iter]) == 0 )
+			return 1;
+	
+	return 0;
+}
+
+/* ========================================================================== */
 
 int iv_image_load( const char *file, Pixmap pixmap, int width, int height )
 {
