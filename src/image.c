@@ -147,11 +147,17 @@ int iv_image_has_valid_extension( const char *path )
 
 int iv_image_load( const char *file, Pixmap pixmap, int width, int height )
 {
-	Imlib_Load_Error error   = IMLIB_LOAD_ERROR_NONE;
-	Imlib_Image      image   = NULL;
-	Imlib_Image      cropped = NULL;
+	Imlib_Load_Error error = IMLIB_LOAD_ERROR_NONE;
+
+	Imlib_Image image   = NULL;
+	Imlib_Image cropped = NULL;
+
+	int    w, h, diffx, diffy, diffz;
+	double aspect1, aspect2;
 	
 	assert( file );
+	assert( width != 0 );
+	assert( height != 0 );
 	
 	/* próbuj otworzyć plik */
 	image = imlib_load_image_with_error_return( file, &error );
@@ -181,10 +187,52 @@ int iv_image_load( const char *file, Pixmap pixmap, int width, int height )
 		}
 		return 1;
 	}
-	
+
+	imlib_context_set_image( image );
+
+	/* pobierz wymiary obrazka */
+	w = imlib_image_get_width();
+	h = imlib_image_get_height();
+
+	aspect1 = (double)width / (double)height;
+	aspect2 = (double)w / (double)h;
+
+	/* korekta w przypadku gdy szerokość przy skalowaniu będzie niepoprawna */
+	if( aspect1 < aspect2 )
+	{
+		aspect2 = (double)h / (double)height;
+
+		diffz = (int)((double)width * aspect2);
+		diffy = 0;
+
+		if( diffz % 2 > 0 )
+			diffz = diffz + 1;
+
+		diffx = (int)((double)abs(w - diffz) / 2.0);
+		w     = diffz;
+	}
+	/* korekta w przypadku gdy wysokość przy skalowaniu będzie niepoprawna */
+	else
+	{
+		aspect1 = (double)w / (double)width;
+
+		diffz = (int)((double)height * aspect1);
+		diffx = 0;
+
+		if( diffz % 2 > 0 )
+			diffz = diffz + 1;
+
+		diffy = (int)((double)abs(h - diffz) / 2.0);
+		h     = diffz;
+	}
+
+	/* przytnij obraz do obliczonych wymiarów */
+	cropped = imlib_create_cropped_image( diffx, diffy, w, h );
+	imlib_free_image();
+
 	/* przypisz dane do mapy pikseli */
 	imlib_context_set_drawable( pixmap );
-	imlib_context_set_image( image );
+	imlib_context_set_image( cropped );
 	imlib_render_image_on_drawable_at_size( 0, 0, width, height );
 	
 	/* zwolnij pamięć po obrazku */
